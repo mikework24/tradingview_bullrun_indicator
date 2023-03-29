@@ -1,0 +1,879 @@
+//@version=4
+
+study("[MF] Bitcoin Bullrun Indicator", shorttitle="[MF]BTC Bullrun Indicator", overlay=true)
+
+//check if is a btc chart
+coin = syminfo.ticker
+is_btc = false
+if(coin == "BTCUSDT" or coin == "BTCUSD" or coin == "BTCBUSD" or coin == "BTC" or coin == "BTCPERP" or coin == "BTCUSDC")
+    is_btc := true
+
+
+show_warnings     = input(true, "Show warnings", type = input.bool)
+show_calculations = input(true, "Show Bull Run Index", type = input.bool,inline="bri")
+show_calculations_s = input(defval="Small", title="", options=["Small", "Normal"],inline="bri")
+
+change_barcolor   = input(true, "Change barcolors", type = input.bool)
+kontrast_bg       = input(defval="0", title="Background Color", options=["---","--", "-", "0", "+", "++", "+++"])
+
+
+alert_msg = ""
+next_alert_symb = "\n"
+
+alert_up = ""
+alert_down = ""
+
+bgcolor_green = 0
+bgcolor_red = 0
+
+
+//Calculate how many candles have one day
+var candle_time = 0.0
+if(candle_time == 0 and time[1] > 0)
+    candle_time := ((time - time[1])/1000/60/60)
+multip = 24/candle_time>=1?24/candle_time:6
+
+
+//position in %
+posToPer(hi, price, lo) =>
+    ant = 0.0
+    if(price > hi)
+        ant := 100
+    if(price < lo)
+        ant := 0
+    if(price <= hi and price >= lo)
+        ant := 100 / ( (hi / price) + (price / lo)  ) * ( price / lo)
+    ant := ant > 100 ? 100 : ant < 0 ? 0 : ant
+
+
+
+//////////////////////////////////////////
+//          Prepare Warnings            //
+//////////////////////////////////////////
+var label results_label = na
+var string results_text = na
+var results = array.new_string(0, "")
+if (not na(results_label))
+    // Constant Refreshf
+    label.delete(results_label)
+
+var string warnings_text = na
+var warnings = array.new_string(0, "")
+var label warnings_label = na
+var color warnings_col = color.red
+
+if (not na(warnings_label))
+    // Constant Refresh
+    label.delete(warnings_label)
+
+amount_warnung = false
+i_up = "⯅"
+i_down = "⯆ "
+
+
+//////////////////////////////////////////
+//              ema ribbon 1h           //
+//////////////////////////////////////////
+show_ema_rib3 = input(false, "Show EMA RIBBON", type = input.bool, group="EMA RIBBON 1H")
+show_ema_rib3_bg = input(false, "Background Colors and labels", type = input.bool, group="EMA RIBBON 1H")
+show_ema_rib3_al = input(false, "Alerts on Crossover", type = input.bool, group="EMA RIBBON 1H")
+
+ema21r3 = security(syminfo.tickerid, "60", ema(close, 21), barmerge.gaps_off, barmerge.lookahead_on)
+ema55r3 = security(syminfo.tickerid, "60", ema(close, 55), barmerge.gaps_off, barmerge.lookahead_on)
+
+rib213 = plot(ema21r3, color=ema21r3<ema55r3?color.new(color.red, tonumber(timeframe.period) <= 60 and show_ema_rib3?30:100):color.new(color.green, tonumber(timeframe.period) <= 60 and show_ema_rib3?30:100), linewidth=1, title="EMA 21 1h")
+rib553 = plot(ema55r3, color=ema21r3<ema55r3?color.new(color.red, tonumber(timeframe.period) <= 60 and show_ema_rib3?30:100):color.new(color.green, tonumber(timeframe.period) <= 60 and show_ema_rib3?30:100), linewidth=1, title="EMA 55 1h")
+fill(rib213, rib553, color=ema21r3<ema55r3?color.new(color.red, tonumber(timeframe.period) <= 60 and show_ema_rib3?90:100):color.new(color.green, tonumber(timeframe.period) <= 60 and show_ema_rib3?90:100), title="EMA Ribbon 1h")
+
+
+//bgcolor
+bgcolor_green := show_ema_rib3_bg and tonumber(timeframe.period) <= 60 and crossover(ema21r3, ema55r3) ? bgcolor_green+15 : bgcolor_green
+bgcolor_red   := show_ema_rib3_bg and tonumber(timeframe.period) <= 60 and crossover(ema55r3, ema21r3) ? bgcolor_red  +15 : bgcolor_red
+
+
+//alerts
+if(show_ema_rib3_al and crossover(ema21r3, ema55r3))
+    alert_msg := "EMA RIBBON 1h LONG!" + next_alert_symb + alert_msg
+if(show_ema_rib3_al and crossover(ema55r3, ema21r3))
+    alert_msg := "EMA RIBBON 1h SHORT!" + next_alert_symb + alert_msg
+
+
+//warnings
+if(show_ema_rib3_bg and crossover(ema21r3, ema55r3))
+    alert_up := alert_up + next_alert_symb + i_up + next_alert_symb + "EMA RIBBON\n1h LONG!"
+if(show_ema_rib3_bg and crossover(ema55r3, ema21r3))
+    alert_down := "EMA RIBBON\n1h SHORT!" + next_alert_symb + i_down + next_alert_symb + alert_down
+
+
+//////////////////////////////////////////
+//              ema ribbon 4h           //
+//////////////////////////////////////////
+show_ema_rib = input(true, "Show EMA RIBBON", type = input.bool, group="EMA RIBBON 4H")
+show_ema_rib_bg = input(true, "Background Colors and labels", type = input.bool, group="EMA RIBBON 4H")
+show_ema_rib_al = input(true, "Alerts on Crossover", type = input.bool, group="EMA RIBBON 4H")
+
+ema21r = security(syminfo.tickerid, "240", ema(close, 21), barmerge.gaps_off, barmerge.lookahead_on)
+ema55r = security(syminfo.tickerid, "240", ema(close, 55), barmerge.gaps_off, barmerge.lookahead_on)
+
+rib21 = plot(ema21r, color=ema21r<ema55r?color.new(color.red, tonumber(timeframe.period) <= 240 and show_ema_rib?30:100):color.new(color.green, tonumber(timeframe.period) <= 240 and show_ema_rib?30:100), linewidth=1, title="EMA 21 4h")
+rib55 = plot(ema55r, color=ema21r<ema55r?color.new(color.red, tonumber(timeframe.period) <= 240 and show_ema_rib?30:100):color.new(color.green, tonumber(timeframe.period) <= 240 and show_ema_rib?30:100), linewidth=1, title="EMA 55 4h")
+fill(rib21, rib55, color=ema21r<ema55r?color.new(color.red, tonumber(timeframe.period) <= 240 and show_ema_rib?90:100):color.new(color.green, tonumber(timeframe.period) <= 240 and show_ema_rib?90:100), title="EMA Ribbon 4h")
+
+
+//bgcolors
+bgcolor_green := show_ema_rib_bg and tonumber(timeframe.period) <= 240 and crossover(ema21r, ema55r) ? bgcolor_green+15 : bgcolor_green
+bgcolor_red   := show_ema_rib_bg and tonumber(timeframe.period) <= 240 and crossover(ema55r, ema21r) ? bgcolor_red  +15 : bgcolor_red
+
+
+//alerts
+if(show_ema_rib_al and crossover(ema21r, ema55r))
+    alert_msg := "EMA RIBBON 4h LONG!" + next_alert_symb + alert_msg
+if(show_ema_rib_al and crossover(ema55r, ema21r))
+    alert_msg  := "EMA RIBBON 4h SHORT!" + next_alert_symb + alert_msg
+
+
+//warnings
+if(show_ema_rib_bg and crossover(ema21r, ema55r) and tonumber(timeframe.period) <= 240)
+    alert_up := alert_up + next_alert_symb + i_up + next_alert_symb + "EMA RIBBON\n4h LONG!"
+if(show_ema_rib_bg and crossover(ema55r, ema21r) and tonumber(timeframe.period) <= 240)
+    alert_down := "EMA RIBBON\n4h SHORT!" + next_alert_symb + i_down + next_alert_symb + alert_down
+
+
+//////////////////////////////////////////
+//              ema ribbon 1d           //
+//////////////////////////////////////////
+show_ema_rib2 = input(true, "Show EMA RIBBON", type = input.bool, group="EMA RIBBON 1d")
+show_ema_rib2_bg = input(true, "Background Colors and labels", type = input.bool, group="EMA RIBBON 1d")
+show_ema_rib2_al = input(true, "Alerts on Crossover", type = input.bool, group="EMA RIBBON 1d")
+
+ema21r2 = security(syminfo.tickerid, "D", ema(close, 21), barmerge.gaps_off, barmerge.lookahead_on)
+ema55r2 = security(syminfo.tickerid, "D", ema(close, 55), barmerge.gaps_off, barmerge.lookahead_on)
+
+rib212 = plot(ema21r2, color=ema21r2<ema55r2?color.new(color.red, show_ema_rib2?30:100):color.new(color.green, show_ema_rib2?30:100), linewidth=1, title="EMA 21 1d")
+rib552 = plot(ema55r2, color=ema21r2<ema55r2?color.new(color.red, show_ema_rib2?30:100):color.new(color.green, show_ema_rib2?30:100), linewidth=1, title="EMA 55 1d")
+fill(rib212, rib552, color=ema21r2<ema55r2?color.new(color.red, show_ema_rib2?90:100):color.new(color.green,show_ema_rib2?90:100), title="EMA Ribbon 1d")
+
+
+//bgcolor
+bgcolor_green := show_ema_rib2_bg and crossover(ema21r2, ema55r2) ? bgcolor_green+15 : bgcolor_green
+bgcolor_red   := show_ema_rib2_bg and crossover(ema55r2, ema21r2) ? bgcolor_red  +15 : bgcolor_red
+
+
+//alerts
+if(show_ema_rib2_al and crossover(ema21r2, ema55r2))
+    alert_msg := "EMA RIBBON 1d LONG!" + next_alert_symb + alert_msg
+if(show_ema_rib2_al and crossover(ema55r2, ema21r2))
+    alert_msg := "EMA RIBBON 1d SHORT!" + next_alert_symb + alert_msg
+
+
+//warnings
+if(show_ema_rib2_bg and crossover(ema21r2, ema55r2))
+    alert_up := alert_up + next_alert_symb + i_up + next_alert_symb + "EMA RIBBON\n1d LONG!"
+if(show_ema_rib2_bg and crossover(ema55r2, ema21r2))
+    alert_down := "EMA RIBBON\n1d SHORT!" + next_alert_symb + i_down + next_alert_symb + alert_down
+
+
+
+///////////////////////////////////////////////////////
+//  Golden Ratio Fibonacci Multipliers Top Detector  //
+///////////////////////////////////////////////////////
+show_golden_ratio = input(true, "Show Golden Ratio", type = input.bool, group="Golden Ratio Fibonacci")
+show_golden_ratio_bg = input(true, "Background Colors and labels", type = input.bool, group="Golden Ratio Fibonacci")
+show_golden_ratio_al = input(true, "Alerts on Crossover", type = input.bool, group="Golden Ratio Fibonacci")
+
+sma350 = 0.0
+sma350_4h = security(syminfo.tickerid, "240", ema(close, 350), barmerge.gaps_off, barmerge.lookahead_off)
+sma350_1d = security(syminfo.tickerid, "D", ema(close, 58), barmerge.gaps_off, barmerge.lookahead_off)
+if(tonumber(timeframe.period) <= 240) //hide error if the timevrame is higher than the 4h candel
+    sma350 := sma350_4h
+else
+    sma350 := sma350_1d
+
+
+//1.618
+sma350_16 = sma350 * 1.618
+sma350_16b = sma350_16 + ((sma350_16[1] - sma350_16[multip*7]) / 6)
+plot(sma350_16, "SMA 350 4h * 1.618 (Golden Ratio)", color=#83ff00, transp=show_golden_ratio?0:100, linewidth=2)
+line_sma350_16 = show_golden_ratio and barstate.islast? line.new(time, sma350_16,time+(1000*60*60*24), sma350_16b, xloc=xloc.bar_time,color=#83ff00,extend=extend.right, width=2) : na
+line.delete(line_sma350_16[1])
+line_sma350_16a = show_golden_ratio and barstate.islast? label.new(time, sma350_16,xloc=xloc.bar_time,text="Golden Ratio", size=size.normal,textcolor=#83ff00,color=color.new(color.black,100), style=sma350_16 > sma350_16b ?label.style_label_lower_left:label.style_label_upper_left) : na
+label.delete(line_sma350_16a[1])
+
+
+//2.0
+sma350_20 = sma350 * 2 
+sma350_20b = sma350_20 + ((sma350_20[1] - sma350_20[multip*7]) / 6)
+plot(sma350_20, "SMA 350 4h x 2", color=#ff2a00, transp=show_golden_ratio?0:100, linewidth=2)
+line_sma350_2 = show_golden_ratio and barstate.islast? line.new(time, sma350_20,time+(1000*60*60*24), sma350_20b, xloc=xloc.bar_time,color=#ff2a00,extend=extend.right, width=2) : na
+line.delete(line_sma350_2[1])
+line_sma350_2a = show_golden_ratio and barstate.islast? label.new(time, sma350_20,xloc=xloc.bar_time,text="SMA 350 x 2", size=size.normal,textcolor=#ff2a00,color=color.new(color.black,100), style=sma350_20 > sma350_20b ?label.style_label_lower_left:label.style_label_upper_left) : na
+label.delete(line_sma350_2a[1])
+
+
+//bgcolor
+bgcolor_red   :=  show_golden_ratio_bg and sma350_16 < close ? bgcolor_red  +15 : bgcolor_red
+bgcolor_red   :=  show_golden_ratio_bg and sma350_20 < close ? bgcolor_red  +15 : bgcolor_red
+
+
+//alerts and labels
+var sma350_16_time = 0
+if(show_golden_ratio_bg and close > sma350_16 and close[1] < sma350_16[1])
+    if(time <= sma350_16_time + (1000*60*60*12))
+        sma350_16_time := sma350_16_time //or time
+    else
+        alert_down := "Top of the\nGolden Ratio" + next_alert_symb + i_down + next_alert_symb + alert_down
+        alert_msg := "Top of the Golden Ratio" + next_alert_symb + alert_msg
+        sma350_16_time := time
+
+var sma350_20_time = 0
+if(show_golden_ratio_bg and close > sma350_20 and close[1] < sma350_20[1])
+    if(time <= sma350_20_time + (1000*60*60*12))
+        sma350_20_time := sma350_20_time //or time
+    else
+        alert_down := "Top of the\nSMA 350 x 2" + next_alert_symb + i_down + next_alert_symb + alert_down
+        alert_msg := "Top of the SMA 350 x 2" + next_alert_symb + alert_msg
+        sma350_20_time := time
+
+
+
+//alerts
+//if(show_golden_ratio_al and crossover(close, sma350_16))
+//    alert_msg := "Crossover the Golden Ratio" + next_alert_symb + alert_msg
+//if(show_golden_ratio_al and crossover(close, sma350_20))
+//    alert_msg := "Crossover the SMA 350 x 2" + next_alert_symb + alert_msg
+
+
+//warnings
+//if(show_golden_ratio_bg and crossover(close, sma350_16))
+//    alert_down := "Crossover the\nGolden Ratio" + next_alert_symb + i_down + next_alert_symb + alert_down
+//if(show_golden_ratio_bg and crossover(close, sma350_20))
+//    alert_down := "Crossover the\nSMA 350 x 2" + next_alert_symb + i_down + next_alert_symb + alert_down
+
+
+//////////////////////////////////////////
+//  Pi Cycle Bitcoin top indicator      //
+//////////////////////////////////////////
+show_pi    = input(false, "Show Moving Averages", type = input.bool, group="Pi Cycle Bitcoin top indicator")
+show_pi_bg = input(true, "Background Colors and labels", type = input.bool, group="Pi Cycle Bitcoin top indicator")
+show_pi_al = input(true, "Alerts on Crossover", type = input.bool, group="Pi Cycle Bitcoin top indicator")
+
+pi_long_input = input(350, "SMA(350) * 2", type = input.integer, group="Pi Cycle Bitcoin top indicator")
+pi_short_input = input(111, "SMA(111)", type = input.integer, group="Pi Cycle Bitcoin top indicator")
+
+pi_long = security(syminfo.tickerid, 'D', sma(close, pi_long_input)*2)
+pi_short = security(syminfo.tickerid, 'D', sma(close, pi_short_input))
+
+plot(show_pi?pi_long:na, color=color.green, title="Daily SMA 350")
+plot(show_pi?pi_short:na, color=color.red, title="Daily SMA 111")
+
+pi_alert_aktiv = false
+var PiCycleTop_time = 0
+if(crossunder(pi_long, pi_short))
+    PiCycleTop_time := time
+
+
+//Warnings and bgcolor
+if (time >= PiCycleTop_time and time <= PiCycleTop_time + (1000*60*60*24*3)) //3 Days
+    pi_alert_aktiv := true
+    array.push(warnings, i_down+" The Pi Cycle Top has been reached, historically Bitcoin tops within 3 days of reaching this ratio!")
+    bgcolor_red := show_pi_bg ? bgcolor_red  +15 : bgcolor_red //bgcolor
+
+if(show_pi_bg and crossunder(pi_long, pi_short))
+    alert_down := "Pi Cycle Top" + next_alert_symb + i_down + alert_down
+
+
+//alert
+if(show_pi_al and crossunder(pi_long, pi_short))
+    alert_msg := "The Pi Cycle Top has been reached, historically Bitcoin tops within 3 days of reaching this ratio!" + next_alert_symb + alert_msg
+    
+
+//Bullrun Indicator
+pi_cycle_hi = 100
+pi_cycle_lo = input(33, "Pi Cycle LO", type = input.integer)
+pi_cycle_per = 100 / pi_long * pi_short
+pi_cycle_per := pi_cycle_per>100?100:pi_cycle_per<0?0:pi_cycle_per
+
+
+//////////////////////////////////////////
+//      Bitcoin 2-Year MA Multiplier    //
+//////////////////////////////////////////
+show_2_year    = input(true, "Show 2-Year MA", type = input.bool, group="Bitcoin 2-Year MA Multiplier")
+show_2_year_bg = input(true, "Background Colors and labels", type = input.bool, group="Bitcoin 2-Year MA Multiplier")
+show_2_year_al = input(true, "Alerts on Crossover", type = input.bool, group="Bitcoin 2-Year MA Multiplier")
+
+price = security(syminfo.ticker, "D", close, gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
+
+sma = sma(close, 730)
+out_o = security(syminfo.ticker, "D", sma, gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
+
+//original
+p5_o = plot(out_o, color=color.new(color.green,show_2_year?60:100), title="2-Year SMA")
+
+out = out_o * 0.75
+out5 = out * 5.9
+
+//0.75
+p1 = plot(out, color=color.new(color.green,show_2_year?0:100), title="2-Year SMA x 0.75")
+
+//5.9
+p5 = plot(out5, color=color.new(color.red,show_2_year?0:100), title="2-Year SMA x 5")
+
+fill(p5_o, p5, color=color.new(color.blue, show_2_year_bg and show_2_year?93:100), title="2-Year Range")
+fill(p1, p5_o, color=color.new(color.green, show_2_year_bg and show_2_year?90:100), title="2-Year Buy Range")
+
+
+//lines to the future
+outb = out + ((out[1] - out[multip*14]) / 15)
+out5b = out5 + ((out5[1] - out5[multip*14]) / 15)
+
+line_out = show_2_year and barstate.islast? line.new(time, out,time+(1000*60*60*24), outb, xloc=xloc.bar_time,color=color.green,extend=extend.right, width=1) : na
+line.delete(line_out[1])
+line_out5 = show_2_year and barstate.islast? line.new(time, out5,time+(1000*60*60*24), out5b, xloc=xloc.bar_time,color=color.red,extend=extend.right, width=1) : na
+line.delete(line_out5[1])
+
+
+//warnings , bgcolor and alerts
+to_year_hi = input(90, "2-Year MA HI", type = input.integer, group="Bitcoin 2-Year MA Multiplier")
+to_year_lo = input(1, "2-Year MA LO", type = input.integer, group="Bitcoin 2-Year MA Multiplier")
+
+to_year_ma_per = out_o>=0?posToPer(out5, close, out):na
+
+
+var to_year_ma_time = 0
+
+//alerts and labels
+if(show_2_year_al and to_year_ma_per >= to_year_hi and to_year_ma_per[1] < to_year_hi)
+    if(time <= to_year_ma_time + (1000*60*60*12))
+        to_year_ma_time := to_year_ma_time //or time
+    else
+        alert_msg := "We reached the top of 2 years MA!" + next_alert_symb + alert_msg
+        alert_down := "Top of\n2 years MA!" + next_alert_symb + i_down + alert_down
+        to_year_ma_time := time
+
+if(show_2_year_al and to_year_ma_per <= to_year_lo and to_year_ma_per[1] > to_year_lo)
+    if(time <= to_year_ma_time + (1000*60*60*12))
+        to_year_ma_time := to_year_ma_time //or time
+    else
+        alert_msg := "We reached the low of 2 years MA!" + next_alert_symb + alert_msg
+        alert_up := alert_up + i_up + next_alert_symb + "Low of\n2 years MA!"
+        to_year_ma_time := time
+
+
+//warnings
+if (to_year_ma_per >= to_year_hi)
+    array.push(warnings, i_down+" We reached the top of 2 years MA!")
+    bgcolor_red := show_2_year_bg ? bgcolor_red  +15 : bgcolor_red //bgcolor
+
+if (to_year_ma_per <= to_year_lo)
+    array.push(warnings, i_up+" We reached the low of 2 years MA!")
+    bgcolor_green := show_2_year_bg ? bgcolor_green  +15 : bgcolor_green //bgcolor
+
+
+//////////////////////////////////////////
+//      Bitcoin Logarithmic Curves      //
+//////////////////////////////////////////
+show_LogarithmicB = input(true, "Show Logarithmic Curves", type = input.bool, group="Bitcoin Logarithmic Curves")
+ShowFibsB =      input(true, title="Show Fibonacci Levels?", type = input.bool, group="Bitcoin Logarithmic Curves")
+show_Logarithmic_bgB = input(true, "Background Color on hit", type = input.bool, group="Bitcoin Logarithmic Curves")
+
+show_Logarithmic = show_LogarithmicB
+ShowFibs         = ShowFibsB
+show_Logarithmic_bg = show_Logarithmic_bgB
+
+if(not is_btc)
+    show_Logarithmic := false
+    ShowFibs         := false
+    show_Logarithmic_bg := false
+
+//HighIntercept = input(1.08130947, title="Top Curve Intercept", step=0.001, group="Bitcoin Logarithmic Curves")
+//HighSlope =     input(0.000765, title="Top Curve Slope", step=0.00001, group="Bitcoin Logarithmic Curves")
+//LowIntercept =  input(-2.9869716, title="Bottom Curve Intercept", step=0.01, group="Bitcoin Logarithmic Curves")
+//LowSlope =      input(0.001299, title="Bottom Curve Slope", step=0.00001, group="Bitcoin Logarithmic Curves")
+
+HighIntercept = 1.06930947
+HighSlope =     0.00076
+LowIntercept =  -3.0269716
+LowSlope =      0.001329
+
+// TIME CALCS
+TimeIndex =     time < 1279670400000 ? 3.0 : (time - 1279670400000) / 86400000
+Weight =        (log10(TimeIndex + 10) * TimeIndex * TimeIndex - TimeIndex) / 30000
+TimeDelta =     time - time[1]
+
+// TOP OF CHANNEL INTERCEPT & SLOPE CALCS
+HighSlopeCum =  HighSlope * TimeIndex
+HighLogDev =    TimeIndex > 2 ? log(Weight) + HighIntercept + HighSlopeCum : na
+
+// BOTTOM OF CHANNEL INTERCEPT & SLOPE CALCS
+LowSlopeCum =   LowSlope * TimeIndex
+LowLogDev =     TimeIndex > 2 ? log(Weight) + LowIntercept + LowSlopeCum : na
+
+// TOTAL CHANNEL LOG RANGE
+LogRange =      HighLogDev - LowLogDev
+
+// FIBONACCI LEVELS
+Fib9098Calc =   (LogRange * 0.9098) + LowLogDev
+Fib8541Calc =   (LogRange * 0.8541) + LowLogDev
+Fib7639Calc =   (LogRange * 0.7639) + LowLogDev
+Fib618Calc =    (LogRange * 0.618) + LowLogDev
+MidCalc =       (LogRange * 0.5) + LowLogDev
+Fib382Calc =    (LogRange * 0.382) + LowLogDev
+Fib2361Calc =   (LogRange * 0.2361) + LowLogDev
+Fib1459Calc =   (LogRange * 0.1459) + LowLogDev
+Fib0902Calc =   (LogRange * 0.0902) + LowLogDev
+
+// SCALE LOG VARIABLES TO LINEAR
+HighDev =       pow(2.718281828459, HighLogDev)
+Fib9098Dev =    show_Logarithmic ? ShowFibs ? pow(2.718281828459, Fib9098Calc) : na : na
+Fib8541Dev =    show_Logarithmic ? ShowFibs ? pow(2.718281828459, Fib8541Calc) : na : na
+Fib7639Dev =    show_Logarithmic ? ShowFibs ? pow(2.718281828459, Fib7639Calc) : na : na
+Fib618Dev =     show_Logarithmic ? ShowFibs ? pow(2.718281828459, Fib618Calc) : na : na
+MidDev =        pow(2.718281828459, MidCalc)
+Fib382Dev =     show_Logarithmic ? ShowFibs ? pow(2.718281828459, Fib382Calc) : na : na
+Fib2361Dev =    show_Logarithmic ? ShowFibs ? pow(2.718281828459, Fib2361Calc) : na : na
+Fib1459Dev =    show_Logarithmic ? ShowFibs ? pow(2.718281828459, Fib1459Calc) : na : na
+Fib0902Dev =    show_Logarithmic ? ShowFibs ? pow(2.718281828459, Fib0902Calc) : na : na
+LowDev =        pow(2.718281828459, LowLogDev)
+
+// COLOR SCHEME
+ColorScheme = color(color.white)
+
+// PLOTS
+plot(show_Logarithmic ? HighDev : na, color=ColorScheme, transp=0, title="100% - Top of Channel")
+plot(Fib9098Dev, color=ColorScheme, transp=50, title="90.98% - Fibonacci Level")
+plot(Fib8541Dev, color=ColorScheme, transp=50, title="85.41% - Fibonacci Level")
+plot(Fib7639Dev, color=ColorScheme, transp=50, title="76.39% - Fibonacci Level")
+plot(Fib618Dev, color=ColorScheme, transp=50, title="61.80% - Fibonacci Level")
+plot(show_Logarithmic ? MidDev : na, color=ColorScheme, transp=0, title="50% - Middle of Channel")
+plot(Fib382Dev, color=ColorScheme, transp=50, title="38.20% - Fibonacci Level")
+plot(Fib2361Dev, color=ColorScheme, transp=50, title="23.61% - Fibonacci Level")
+plot(Fib1459Dev, color=ColorScheme, transp=50, title="14.59% - Fibonacci Level")
+plot(Fib0902Dev, color=ColorScheme, transp=50, title="9.02% - Fibonacci Level")
+plot(show_Logarithmic ? LowDev : na, color=ColorScheme, transp=0, title="0% - Bottom of Channel")
+
+
+//////////////////////////////////////////////////////////
+//                                                      //
+// CURVE EXTENSION DRAWING FUNCTION & HELPER VARIABLES  //
+//                                                      //
+//////////////////////////////////////////////////////////
+
+// CURVE EXTENSION FUNCTION
+ExtenZe(_i, _slope, _intercept) =>
+    TI = ((time + TimeDelta *_i) -1279670400000) / 86400000
+    W = (log10(TI + 10) * TI * TI - TI) / 30000
+    HSC = _slope * TI
+    HLD = log(W) + _intercept + HSC
+    HD = pow(2.718281828459, HLD)
+    HD
+
+// VARIABLES FOR ADJUSTING LENGTH OF CURVE EXTENSIONS RELATIVE TO CHART TIME-FRAME
+ForLoopStep = timeframe.ismonthly == 1 ? ceil( 12 / timeframe.multiplier) : 
+              timeframe.isweekly == 1 ? ceil(26 / timeframe.multiplier) : 
+              timeframe.isdaily == 1 ? ceil(91 / timeframe.multiplier) : 
+              (timeframe.isminutes == 1) and (timeframe.multiplier > 59) ? ceil(10080 / timeframe.multiplier) : na
+ForLoopMax =    na(ForLoopStep) ? na : ForLoopStep * 13
+
+// MID CURVE SLOPE & INTERCEPT
+MidSlope =      (HighSlope + LowSlope) * 0.5
+MidIntercept =  (HighIntercept + LowIntercept) * 0.5
+
+// CHECK IF LAST BAR & "Show Curve Projections" IS CHECKED, THEN DRAW CURVE EXTENZES
+if barstate.islast and show_Logarithmic
+    for i = 0 to ForLoopMax-1 by ForLoopStep
+        log_line1 = line.new(time + TimeDelta * i, ExtenZe(i, HighSlope, HighIntercept), time + TimeDelta * (i + ForLoopStep), ExtenZe(i + ForLoopStep, HighSlope, HighIntercept), xloc=xloc.bar_time, color=ColorScheme)
+        log_line2 = line.new(time + TimeDelta * i, ExtenZe(i, LowSlope, LowIntercept), time + TimeDelta * (i + ForLoopStep), ExtenZe(i + ForLoopStep, LowSlope, LowIntercept), xloc=xloc.bar_time, color=ColorScheme)
+        log_line3 = line.new(time + TimeDelta * i, ExtenZe(i, MidSlope, MidIntercept), time + TimeDelta * (i + ForLoopStep), ExtenZe(i + ForLoopStep, MidSlope, MidIntercept), xloc=xloc.bar_time, color=ColorScheme)
+        line.delete(log_line1[1])
+        line.delete(log_line2[1])
+        line.delete(log_line3[1])
+
+
+btc_Log_hi = input(90, "Logarithmic HI", type = input.integer, group="Bitcoin Logarithmic Curves")
+btc_Log_lo = input(13, "Logarithmic LO", type = input.integer, group="Bitcoin Logarithmic Curves")
+
+btc_Logarithmic_per = posToPer(HighDev, close, LowDev)
+
+if(is_btc)
+    if (btc_Logarithmic_per >= btc_Log_hi)
+        array.push(warnings, i_down+" We reached the top of the logarithmic curve!")
+        bgcolor_red := show_Logarithmic_bg ? bgcolor_red  +15 : bgcolor_red
+    
+    if (btc_Logarithmic_per <= btc_Log_lo)
+        array.push(warnings, i_up+" We reached the bottom of the Logarithmic Curve!")
+        bgcolor_green := show_Logarithmic_bg ? bgcolor_green  +15 : bgcolor_green
+
+
+//show_2_year_al = input(true, "Alerts on Crossover", type = input.bool, group="Bitcoin 2-Year MA Multiplier")
+
+
+//////////////////////////////////////////
+//              sma 200 daily           //
+//////////////////////////////////////////
+show_sma200    = input(false, "Show Daily 200 SMA", type = input.bool, group="Daily 200 SMA (Golden Cross & Death Cross)")
+show_sma200_bg = input(true, "Background Color on Golden Cross & Death Cross", type = input.bool, group="Daily 200 SMA (Golden Cross & Death Cross)")
+show_sma200_al = input(true, "Alerts on Golden Cross & Death Cross", type = input.bool, group="Daily 200 SMA (Golden Cross & Death Cross)")
+
+//For Death Cross & Golden Cross
+sma50_1d = security(syminfo.tickerid, "D", sma(close,  50), barmerge.gaps_off, barmerge.lookahead_on)
+
+sma200_1d = security(syminfo.tickerid, "D", sma(close, 200), barmerge.gaps_off, barmerge.lookahead_on)
+sma200_1d2 = sma200_1d + (sma200_1d - sma200_1d[multip])
+
+plot( sma200_1d, color=show_sma200?#ff8200:na, style=plot.style_line, title="SMA 200 daily", linewidth=2, transp=0)
+
+line_sma200d = show_sma200 and barstate.islast? line.new(time, sma200_1d,time+(1000*60*60*24), sma200_1d2, xloc=xloc.bar_time,color=#ff8200,extend=extend.right, width=2) : na
+line.delete(line_sma200d[1])
+
+line_sma200d_lab = show_sma200 and barstate.islast? label.new(time, sma200_1d,xloc=xloc.bar_time,text="SMA 200 daily", size=size.normal,textcolor=#ff8200,color=color.new(color.black,100), style=sma200_1d > sma200_1d2 ?label.style_label_lower_left:label.style_label_upper_left) : na
+label.delete(line_sma200d_lab[1])
+
+
+//alert, warnings, bgcolor
+if (crossover(sma50_1d, sma200_1d))
+    //array.push(warnings, i_up+" Golden Cross!")
+    bgcolor_green := show_sma200_bg ? bgcolor_green  +15 : bgcolor_green //bgcolor
+    alert_up := alert_up + next_alert_symb + i_up + next_alert_symb + "Golden Cross!"
+
+if (crossunder(sma50_1d, sma200_1d))
+    //array.push(warnings, i_down+" Death Cross!")
+    bgcolor_red := show_sma200_bg ? bgcolor_red  +15 : bgcolor_red //bgcolor
+    alert_down := "Death Cross!" + next_alert_symb + i_down + next_alert_symb + alert_down
+
+
+//////////////////////////////////////////
+//                  ema 200             //
+//////////////////////////////////////////
+show_ema200 = input(true, "Show daily 200 EMA", type = input.bool, group="IMPORTANT EMA LINES")
+ema_200val = 200
+
+ema200_1d = security(syminfo.tickerid, "D", ema(close, ema_200val), barmerge.gaps_off, barmerge.lookahead_on)
+ema200_1d2 = ema200_1d + (ema200_1d - ema200_1d[multip])
+
+line_ema200d = show_ema200 and barstate.islast? line.new(time, ema200_1d,time+(1000*60*60*24), ema200_1d2, xloc=xloc.bar_time,color=#ffff00,extend=extend.right, width=2) : na
+line.delete(line_ema200d[1])
+
+line_ema200d_lab = show_ema200 and barstate.islast? label.new(time, ema200_1d,xloc=xloc.bar_time,text="EMA 200 daily", size=size.normal,textcolor=#ffff00,color=color.new(color.black,100), style=ema200_1d > ema200_1d2 ?label.style_label_lower_left:label.style_label_upper_left) : na
+label.delete(line_ema200d_lab[1])
+
+ema_200line = plot( ema200_1d, color=show_ema200?#ffff00:na, style=plot.style_line, title="EMA 200 daily", linewidth=2, transp=0)
+
+
+//alerts
+//if (close < ema200_1d)
+//    array.push(warnings, i_down+" We are below the 200 ema, a further price drop is likely!")
+
+
+//////////////////////////////////////////
+//              ema 21 weekly           //
+//////////////////////////////////////////
+ema_21val = 21
+ema_21color = #DF01D7
+
+show_ema21 = input(false, "Show 21 weekly EMA", type = input.bool, group="IMPORTANT EMA LINES")
+
+line_ema21_1d = security(syminfo.tickerid, "W", ema(close, ema_21val), barmerge.gaps_off, barmerge.lookahead_on)
+line_ema21_1d2 = line_ema21_1d + ((line_ema21_1d - line_ema21_1d[multip*7]) / 7)
+
+line_ema21d = show_ema21 and barstate.islast? line.new(time, line_ema21_1d,time+(1000*60*60*24), line_ema21_1d2, xloc=xloc.bar_time,color=ema_21color,extend=extend.right, width=2) : na
+line.delete(line_ema21d[1])
+
+line_ema21d_lab = show_ema21 and barstate.islast? label.new(time, line_ema21_1d,xloc=xloc.bar_time,text="EMA 21 weekly", size=size.normal,textcolor=ema_21color,color=color.new(color.black,100), style=line_ema21_1d > line_ema21_1d2 ?label.style_label_lower_left:label.style_label_upper_left) : na
+label.delete(line_ema21d_lab[1])
+
+ema_21line = plot( line_ema21_1d, color=show_ema21?ema_21color:na, style=plot.style_line, title="21 weekly EMA", linewidth=2, transp=0)
+
+
+
+//////////////////////////////////////////
+//              ema 55 daily            //
+//////////////////////////////////////////
+show_ema55 = input(false, "Show daily 55 EMA", type = input.bool, group="IMPORTANT EMA LINES")
+ema_55val = 55
+
+line_ema55_1d = security(syminfo.tickerid, "D", ema(close, ema_55val), barmerge.gaps_off, barmerge.lookahead_on)
+line_ema55_1d2 = line_ema55_1d + (line_ema55_1d - line_ema55_1d[multip])
+
+line_ema55d = show_ema55 and barstate.islast? line.new(time, line_ema55_1d,time+(1000*60*60*24), line_ema55_1d2, xloc=xloc.bar_time,color=#00ff00,extend=extend.right, width=2) : na
+line.delete(line_ema55d[1])
+
+line_ema5d_lab = show_ema55 and barstate.islast? label.new(time, line_ema55_1d,xloc=xloc.bar_time,text="EMA 55 daily", size=size.normal,textcolor=#00ff00,color=color.new(color.black,100), style=line_ema55_1d > line_ema55_1d2 ?label.style_label_lower_left:label.style_label_upper_left) : na
+label.delete(line_ema5d_lab[1])
+
+ema_55line = plot( line_ema55_1d, color=show_ema55?#00ff00:na, style=plot.style_line, title="EMA 55 daily", linewidth=2, transp=0)
+
+
+
+//////////////////////////////////////////
+//              Warnings                //
+//////////////////////////////////////////
+
+//Puell Multiple
+Puell_bg = input(true, "Background Color on hit", type = input.bool, group="Puell Multiple")
+Puell_al = input(true, "Alerts on hit", type = input.bool, group="Puell Multiple")
+
+Puell_hi = input(95, "HI", type = input.integer, group="Puell Multiple")
+Puell_lo = input(5, "LO", type = input.integer, group="Puell Multiple")
+
+Puell_top = 0.5 //0.5 sollte es sein
+Puell_bottom = 3.5 // 4 sollte es sein
+Puell_miningRevenue = security("QUANDL:BCHAIN/MIREV", "D", close[1], barmerge.gaps_off, barmerge.lookahead_on)
+Puell_ma365 = security("QUANDL:BCHAIN/MIREV", "D", sma(close, 365)[1], barmerge.gaps_off, barmerge.lookahead_on)
+Puell_puellMultiple = Puell_miningRevenue / Puell_ma365
+
+Puell_per = posToPer(Puell_bottom, Puell_puellMultiple, Puell_top)
+
+if(is_btc)
+    if (Puell_per >= Puell_hi)
+        array.push(warnings, i_down+" We reach the top of the Puell Multiple!")
+        bgcolor_red := Puell_bg ? bgcolor_red  +15 : bgcolor_red //bgcolor
+    
+    if (Puell_per <= Puell_lo)
+        array.push(warnings, i_down+" We reach the bottom of the Puell Multiple!")
+        bgcolor_green := Puell_bg ? bgcolor_green  +15 : bgcolor_green //bgcolor
+    
+    if(Puell_al and Puell_per >= Puell_hi and Puell_per[1] < Puell_hi)
+        alert_msg := "We reached the top of the Puell Multiple!" + next_alert_symb + alert_msg
+    if(Puell_al and Puell_per <= Puell_lo and Puell_per[1] > Puell_lo)
+        alert_msg := "We reached the bottom of the Puell Multiple!" + next_alert_symb + alert_msg
+
+
+//halving_to_peak
+halving_to_peak_bg = input(true, "Background Color on hit", type = input.bool, group="Halving to Peak")
+halving_to_peak_hi = 99
+halving_to_peak_lo = 1
+halving_to_peak = 0
+
+//H1 28.11.2012 -> LO to HI
+having_lo = timestamp(2011, 11, 23, 0, 0)
+having_hi = timestamp(2013, 12, 1, 0, 0)
+if(time > having_lo and time < having_hi)
+    halving_to_peak := 100 / (having_hi - having_lo ) * ( time - having_lo)
+    halving_to_peak := halving_to_peak<=0?0:halving_to_peak>=100?100:halving_to_peak
+
+//reverseing
+having_lo := having_hi
+having_hi := timestamp(2014, 01, 30, 0, 0)
+if(time > having_lo and time < having_hi)
+    halving_to_peak := 100 / (having_hi - having_lo ) * ( time - having_lo)
+    halving_to_peak := halving_to_peak<=0?0:halving_to_peak>=100?100:halving_to_peak
+    halving_to_peak := 100 - halving_to_peak
+
+
+
+//H2 9.07.2016 -> LO to HI
+having_lo := timestamp(2015, 01, 23, 0, 0)
+having_hi := timestamp(2017, 12, 18, 0, 0)
+if(time > having_lo and time < having_hi)
+    halving_to_peak := 100 / (having_hi - having_lo ) * ( time - having_lo)
+    halving_to_peak := halving_to_peak<=0?0:halving_to_peak>=100?100:halving_to_peak
+
+//reverseing
+having_lo := having_hi
+having_hi := timestamp(2018, 02, 16, 0, 0)
+if(time > having_lo and time < having_hi)
+    halving_to_peak := 100 / (having_hi - having_lo ) * ( time - having_lo)
+    halving_to_peak := halving_to_peak<=0?0:halving_to_peak>=100?100:halving_to_peak
+    halving_to_peak := 100 - halving_to_peak
+
+
+
+//H3 11.05.2020 -> LO to HI
+having_lo := timestamp(2018, 12, 10, 0, 0)
+having_hi := timestamp(2022, 03, 29, 0, 0)
+if(time > having_lo and time < having_hi)
+    halving_to_peak := 100 / (having_hi - having_lo ) * ( time - having_lo)
+    halving_to_peak := halving_to_peak<=0?0:halving_to_peak>=100?100:halving_to_peak
+
+//reverseing
+having_lo := having_hi
+having_hi := timestamp(2022, 05, 28, 0, 0)
+if(time > having_lo and time < having_hi)
+    halving_to_peak := 100 / (having_hi - having_lo ) * ( time - having_lo)
+    halving_to_peak := halving_to_peak<=0?0:halving_to_peak>=100?100:halving_to_peak
+    halving_to_peak := 100 - halving_to_peak
+
+
+if(is_btc)
+    if (halving_to_peak >= 99)
+        array.push(warnings, i_down+" We reached the time of the Halving to Peak!")
+        bgcolor_red := halving_to_peak_bg ? bgcolor_red  +15 : bgcolor_red //bgcolor
+    
+    if (halving_to_peak[1] == 0 and halving_to_peak == 1)
+        array.push(warnings, i_down+" We reached the time of the low before Halving!")
+        bgcolor_green := halving_to_peak_bg ? bgcolor_green  +15 : bgcolor_green //bgcolor
+
+
+//sma50 + 75% are hidded!
+sma50up = sma50_1d + sma50_1d * 0.75
+if (close > sma50up)
+    array.push(warnings, i_down+" We had an extreme price increase in recent times! High correction probability!")
+
+//Timeframes
+if (candle_time < 1 or candle_time > (24*7))
+    array.push(warnings, "The indicator was made for the 1h, 4h & 1d chart!")
+
+
+
+if (array.size(warnings) > 0)
+    warnings_text := ""
+    warnings_col := color.red
+    for index = 1 to array.size(warnings)
+        warnings_text := warnings_text + tostring(index) + ". " + array.pop(warnings) + "\n"
+else
+    warnings_col := color.green
+    warnings_text := ""
+
+var Ale = table.new(
+     position=position.bottom_left, columns=1, rows=1, bgcolor=warnings_col, 
+     frame_color=color.black, frame_width=1, border_color=color.black, border_width=0)
+
+table.cell(table_id=Ale, column=0, row=0, text=show_warnings?warnings_text:"", width=0, height=0, text_color=color.white, bgcolor=warnings_col)
+
+
+
+//////////////////////////////////////////
+//              Statistic               //
+//////////////////////////////////////////
+i_negColor = color.rgb(38, 166, 154)
+i_posColor = color.rgb(240, 83, 80)
+i_neuColor = (color.gray)
+i_texColor = (color.red)
+
+columns = 2
+rows = 7
+
+string per_message = ""
+color per_color = i_neuColor
+per_ind = 0.0
+
+var table perfTable = table.new(position.bottom_right, columns, rows, border_width = 2)
+
+f_fillcell(_table, _column, _row, _cellText, _c_color, _t_color, _t_size) =>
+    table.cell(_table, _column, _row, _cellText, bgcolor = color.new(_c_color, show_calculations?84:100), text_size = _t_size=="Small"?size.small:size.normal, text_color = show_calculations?_c_color:color.new(color.black,100))
+
+row_tab = 0
+total_calc = 0.0
+
+if(to_year_ma_per>=0)
+    per_message := "2-Year MA:"
+    per_ind := to_year_ma_per
+    total_calc := to_year_ma_per
+    per_color := per_ind>=to_year_hi?i_posColor:per_ind<=to_year_lo?i_negColor:i_neuColor
+    f_fillcell(perfTable, 0, row_tab, per_message, per_color, i_texColor, show_calculations_s)
+    f_fillcell(perfTable, 1, row_tab, tostring(int(per_ind)) + "%" , per_color, i_texColor, show_calculations_s)
+    row_tab := row_tab + 1
+
+
+if(pi_cycle_per >=0)
+    per_message := "Pi Cycle top:"
+    per_ind := pi_cycle_per
+    total_calc := pi_cycle_per + total_calc
+    per_color := per_ind>=pi_cycle_hi?i_posColor:per_ind<=pi_cycle_lo?i_negColor:i_neuColor
+    f_fillcell(perfTable, 0, row_tab, per_message, per_color, i_texColor, show_calculations_s)
+    f_fillcell(perfTable, 1, row_tab, tostring(int(per_ind)) + "%" , per_color, i_texColor, show_calculations_s)
+    row_tab := row_tab + 1
+
+
+if(btc_Logarithmic_per >=0 and is_btc)
+    per_message := "BTC Logarithmic Curves:"
+    per_ind := btc_Logarithmic_per
+    total_calc := btc_Logarithmic_per + total_calc
+    per_color := per_ind>=btc_Log_hi?i_posColor:per_ind<=btc_Log_lo?i_negColor:i_neuColor
+    f_fillcell(perfTable, 0, row_tab, per_message, per_color, i_texColor, show_calculations_s)
+    f_fillcell(perfTable, 1, row_tab, tostring(int(per_ind)) + "%" , per_color, i_texColor, show_calculations_s)
+    row_tab := row_tab + 1
+
+
+if(is_btc)
+    per_message := "The Puell Multiple:"
+    per_ind := Puell_per
+    total_calc := Puell_per + total_calc
+    per_color := per_ind>=Puell_hi?i_posColor:per_ind<=Puell_lo?i_negColor:i_neuColor
+    f_fillcell(perfTable, 0, row_tab, per_message, per_color, i_texColor, show_calculations_s)
+    f_fillcell(perfTable, 1, row_tab, tostring(int(per_ind)) + "%" , per_color, i_texColor, show_calculations_s)
+    row_tab := row_tab + 1
+
+
+//gold_ratio_per = posToPer(sma350_16, close, out_o)
+out_o := out_o > 0?out_o:0
+gold_ratio_per = 100 / (sma350_16 - out_o) * (close - out_o)
+gold_ratio_per := close<out_o?0:close>sma350_16?100:gold_ratio_per
+gold_ratio_per := gold_ratio_per<0?0:gold_ratio_per>100?100:gold_ratio_per
+
+gold_ratio_hi = 99
+
+per_message := "Golden Ratio Fib:"
+per_ind := gold_ratio_per
+total_calc := per_ind + total_calc
+per_color := per_ind>=gold_ratio_hi?i_posColor:i_neuColor
+f_fillcell(perfTable, 0, row_tab, per_message, per_color, i_texColor, show_calculations_s)
+f_fillcell(perfTable, 1, row_tab, tostring(int(per_ind)) + "%" , per_color, i_texColor, show_calculations_s)
+row_tab := row_tab + 1
+
+
+if(is_btc)
+    per_message := "Halving to Peak:"
+    per_ind := halving_to_peak
+    total_calc := halving_to_peak + total_calc
+    per_color := per_ind>=halving_to_peak_hi?i_posColor:per_ind<=halving_to_peak_lo?i_negColor:i_neuColor
+    f_fillcell(perfTable, 0, row_tab, per_message, per_color, i_texColor, show_calculations_s)
+    f_fillcell(perfTable, 1, row_tab, tostring(int(per_ind)) + "%" , per_color, i_texColor, show_calculations_s)
+    row_tab := row_tab + 1
+
+
+per_message := "Total:"
+per_ind := total_calc / row_tab
+per_color := per_ind>=91?i_posColor:per_ind<=9?i_negColor:i_neuColor
+f_fillcell(perfTable, 0, row_tab, per_message, per_color, i_texColor, show_calculations_s)
+f_fillcell(perfTable, 1, row_tab, tostring(int(per_ind)) + "%" , per_color, i_texColor, show_calculations_s)
+
+
+
+//////////////////////////////////////////
+//          Background Signals          //
+//////////////////////////////////////////
+kont = 0
+if(kontrast_bg == "---")
+    kont := -3
+if(kontrast_bg == "--")
+    kont := -2
+if(kontrast_bg == "-")
+    kont := -1
+if(kontrast_bg == "+")
+    kont := 1
+if(kontrast_bg == "++")
+    kont := 2
+if(kontrast_bg == "+++")
+    kont := 3
+
+bgcolor_transp  = (bgcolor_red>0 and bgcolor_green>0?(bgcolor_green + bgcolor_red) / 2: bgcolor_green+bgcolor_red)
+bgcolor_transp := bgcolor_transp > 0 ? 15 + kont + ( (bgcolor_transp - 15) / 3 ) : bgcolor_transp
+bgcolor_transp := 100 - bgcolor_transp
+bgcolor_transp := bgcolor_transp<=50?50:bgcolor_transp
+
+bgcolor_green := bgcolor_green>0?255:0
+bgcolor_red   := bgcolor_red  >0?255:0
+
+bgcolor(color.rgb(bgcolor_red, bgcolor_green, 0, bgcolor_transp))
+
+barcolor(change_barcolor and bgcolor_green == 0 and bgcolor_red == 0? color.new(color.black,50):na)
+barcolor(change_barcolor and bgcolor_green > 0 and bgcolor_red > 0? color.new(color.yellow,30):na)
+barcolor(change_barcolor and bgcolor_green > 0 and bgcolor_red == 0 ? color.new(#00FF00,0) : na)
+barcolor(change_barcolor and bgcolor_green == 0 and bgcolor_red > 0 ? color.new(#FF0000,0) : na)
+
+/////////////////////////////////////
+//          label Signals          //
+/////////////////////////////////////
+if(alert_up != "")
+    label.new(time, low,xloc=xloc.bar_time,text="\n\n"+alert_up, size=size.normal,textcolor=color.new(color.green,0),color=color.new(color.black,100), style=label.style_label_up)
+if(alert_down != "")
+    label.new(time, high,xloc=xloc.bar_time,text=alert_down+"\n\n", size=size.normal,textcolor=color.new(color.red,0),color=color.new(color.black,100), style=label.style_label_down)
+
+
+//////////////////////////////
+//          Alerts          //
+//////////////////////////////
+if alert_msg != "" and alert_msg != alert_msg[1]
+    alert(tostring(alert_msg), alert.freq_once_per_bar_close)
+
